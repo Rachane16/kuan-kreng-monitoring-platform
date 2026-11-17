@@ -1,0 +1,11 @@
+.private/
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+!.env.example
+node_modules/
+*.log
+web/data/.sync-*/
+web/data/.*-backup/

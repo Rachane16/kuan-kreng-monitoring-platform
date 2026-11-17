@@ -1,0 +1,78 @@
+name: Sync sources and publish platform
+on:
+  workflow_dispatch:
+  schedule:
+    # Upstream FIRMS checks at :07/:37; mirror validated results afterwards.
+    - cron: '17,47 * * * *'
+  push:
+    branches: [main]
+    paths: ['web/**', 'scripts/**', 'tests/**', '.github/workflows/platform.yml']
+concurrency:
+  group: kuan-kreng-platform-pages
+  cancel-in-progress: false
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out platform
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Synchronize validated public data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/sync_data.py
+      - name: Check spatial matching and data selection
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          node --test tests/model.test.cjs
+          node --check web/app.js
+      - name: Preserve platform snapshots
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add web/data/
+          if ! git diff --cached --quiet; then
+            git commit -m 'Synchronize verified monitoring data'
+            git push origin HEAD:main
+          fi
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload platform
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web
+      - name: Wait for artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, time, urllib.request
+          url=f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}/artifacts"
+          for attempt in range(8):
+              req=urllib.request.Request(url,headers={'Authorization':f"Bearer {os.environ['GH_TOKEN']}", 'Accept':'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=25) as response:
+                  artifacts=json.load(response)['artifacts']
+              if any(a['name']=='github-pages' and not a['expired'] for a in artifacts):
+                  print('Pages artifact is available')
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError('Pages artifact metadata is not available yet')
+          PY
+      - name: Deploy platform
+        id: deployment
+        uses: actions/deploy-pages@v4
