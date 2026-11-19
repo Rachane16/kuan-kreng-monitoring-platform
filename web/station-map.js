@@ -3,7 +3,7 @@ window.KKStationMap={create({map,grid,boundary,bounds,projection,readJson,onChan
 const $=id=>document.getElementById(id),M=KKStationModel;
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const q=new URLSearchParams(location.search),cache=new Map(),surfaces=new Map();
-let catalog={stations:[],days:[]},day=null,date=null,requested=q.get('station_hour'),idwOn=q.get('station_idw')==='1',markersOn=q.get('stations')!=='0',loading=false,job=0,paintJob=0,markerLayer=null,surfaceLayer=null,frame=null,fetchError=false,lastRenderKey='',popupOpen=false;
+let catalog={stations:[],days:[]},day=null,date=null,requested=q.get('station_hour'),idwOn=q.get('station_idw')==='1',markersOn=q.get('stations')==='1',loading=false,job=0,paintJob=0,markerLayer=null,surfaceLayer=null,frame=null,fetchError=false,lastRenderKey='',popupOpen=false;
 const inside=coordinate=>boundary.features.some(f=>insideGeometry([coordinate[1],coordinate[0]],f.geometry));
 const hourText=hour=>hour?timeText(hour.start_utc)+'–'+new Date(hour.end_utc).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',hour12:false})+' น.':'ไม่มีข้อมูลรายชั่วโมงของวันที่เลือก';
 function recompute(){const hour=M.selectHour(catalog,day,date,{requested,inside});frame=M.frame(catalog,hour,grid,{inside,project:coordinate=>projection.forward([coordinate[1],coordinate[0]])});lastRenderKey='';}
