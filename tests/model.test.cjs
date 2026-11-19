@@ -97,3 +97,91 @@ test('published real fire summary matches saved unique-grid totals',{skip:!fs.ex
  assert.equal(summary.emissionKg,row.emission_kg);assert.equal(without.emissionKg,row.emission_without_peat_kg);
  assert.equal(new Set(summary.cells.features.map(f=>f.properties.grid_id)).size,summary.gridCount);
 });
+
+
+test('satellite keys are canonical without duplicating ALL, array order or repeated IDs',()=>{
+ const [a,b]=M.satellites;
+ assert.equal(M.sourceKey([b,a,a]),[a,b].sort().join('|'));
+ assert.equal(M.sourceKey(a),a);assert.equal(M.sourceKey([]),'');
+ assert.equal(M.sourceKey('ALL'),[...M.satellites].sort().join('|'));
+ assert.equal(M.sourceKey([...M.satellites].reverse()),M.sourceKey('ALL'));
+});
+function overlapFixture(){
+ const [a,b,c,d]=M.satellites,key=M.sourceKey([a,b]);
+ const feature={type:'Feature',properties:{grid_id:'shared-cell',emission_kg:100},geometry:{type:'Polygon',coordinates:[]}};
+ const one={...totals,observation_count:1,grid_count:1,cluster_count:1,ground_area_ha:100,emission_kg:100,emission_without_peat_kg:20,cells:fc([feature]),clusters:fc([feature])};
+ const union={...one,observation_count:2,_state:'ok'};
+ const day={date:'2026-11-16',data_state:'ok',by_source:{ALL:union,[a]:one,[b]:one,[c]:totals,[d]:totals},source_status:{[a]:'ok',[b]:'ok',[c]:'ok',[d]:'ok'},
+  selections:{[key]:union},hotspots:fc([a,b,c].map((source,i)=>({type:'Feature',properties:{source,grid_id:'shared-cell',id:i},geometry:{type:'Point',coordinates:[100,8]}})))};
+ return {a,b,c,d,key,day,union};
+}
+test('multi-satellite summary uses derived shared-cell union and never adds component emission totals',()=>{
+ const {a,b,c,key,day}=overlapFixture();
+ const selected=M.fireSummary(day,[b,a]);
+ assert.equal(selected.emissionKg,100);assert.equal(selected.gridCount,1);assert.equal(selected.observations,2);
+ assert.equal(selected.hotspots.features.length,2);assert.deepEqual(selected.sources,[a,b].sort());
+ assert.equal(M.fireSummary(day,[a,b],false).emissionKg,20);
+ assert.equal(M.fireSummary({...day,selections:{}},[a,b]).available,false);
+ assert.equal(M.fireSummary(day,[c]).emissionKg,0);
+ const original=day.selections[key].cells.features[0].properties.emission_kg;
+ assert.equal(original,100);assert.notEqual(selected.emissionKg,day.by_source[a].emission_kg+day.by_source[b].emission_kg);
+});
+test('empty satellite selection remains missing rather than displaying ALL or invented zero',()=>{
+ const {day}=overlapFixture(),selected=M.fireSummary(day,[]);
+ assert.equal(selected.available,false);assert.equal(selected.emissionKg,null);assert.equal(selected.observations,null);
+ assert.deepEqual(selected.sources,[]);assert.deepEqual(selected.cells.features,[]);
+ const series=M.fireTimeSeries({daily:[{date:day.date,...day}]},day.date,day.date,[],true,'hotspots');
+ assert.equal(series[0].value,null);assert.equal(series[0].state,'missing');
+});
+test('array-of-one and array-of-all preserve legacy results when no derived cache is provided',()=>{
+ const {a,day}=overlapFixture();delete day.selections;
+ assert.equal(M.fireSummary(day,[a]).emissionKg,M.fireSummary(day,a).emissionKg);
+ assert.equal(M.fireSummary(day,M.satellites).emissionKg,M.fireSummary(day,'ALL').emissionKg);
+});
+test('fire chart switches metrics but preserves confirmed zero and missing coverage',()=>{
+ const {a,b,key,union}=overlapFixture();
+ const zero={...totals,_state:'partial'},missing={...totals,observation_count:null,emission_kg:null,_state:'missing'};
+ const index={daily:[{date:'2026-11-16',selections:{[key]:union}},{date:'2026-11-17',selections:{[key]:zero}},{date:'2026-11-18',selections:{[key]:missing}}]};
+ const sources=[a,b];
+ assert.deepEqual(M.fireTimeSeries(index,'2026-11-16','2026-11-19',sources,true,'hotspots').map(r=>r.value),[2,0,null,null]);
+ assert.deepEqual(M.emissionSeries(index,'2026-11-16','2026-11-19',sources,false).map(r=>r.value),[20,0,null,null]);
+ assert.deepEqual(M.fireTimeSeries(index,'2026-11-16','2026-11-18',sources,false,'count').map(r=>r.state),['ok','partial','missing']);
+});
+test('calendar marks positive fire, observed zero and unavailable dates separately for the selected satellites',()=>{
+ const {a,b,key,union}=overlapFixture(),sources=[a,b];
+ const fireIndex={daily:[{date:'2026-11-16',selections:{[key]:union}},{date:'2026-11-17',selections:{[key]:{...totals,_state:'partial'}}}]};
+ const options={view:'fire',fireIndex,fireSources:sources};
+ let result=M.calendarAvailability({...options,date:'2026-11-16'});
+ assert.equal(result.fire,true);assert.equal(result.fireZero,false);assert.equal(result.available,true);assert.equal(result.partial,false);
+ result=M.calendarAvailability({...options,date:'2026-11-17'});
+ assert.equal(result.fire,false);assert.equal(result.fireZero,true);assert.equal(result.available,true);assert.equal(result.partial,true);
+ result=M.calendarAvailability({...options,date:'2026-11-18'});
+ assert.equal(result.fire,false);assert.equal(result.fireZero,false);assert.equal(result.available,false);
+ result=M.calendarAvailability({...options,date:'2026-11-16',fireSources:[]});assert.equal(result.available,false);
+});
+test('calendar air availability follows source, period and actual valid samples without moving dates',()=>{
+ const air={maiac:{grid_count:4,days:[maiac]},cams:{grid_count:2,days:[cams]},forecast:{hours:[{valid_time:'2026-11-18T18:00:00Z',status:'Available',cells:[['x',.1,10],['y',.2,20]]}]}};
+ const base={view:'air',air,now:'2026-11-18T19:00:00Z'};
+ let result=M.calendarAvailability({...base,date:'2026-09-15',airSource:'maiac'});
+ assert.equal(result.air,true);assert.equal(result.partial,true);assert.equal(result.forecast,false);
+ result=M.calendarAvailability({...base,date:'2026-09-15',airSource:'cams',airPeriod:'daily'});
+ assert.equal(result.air,true);assert.equal(result.partial,false);
+ result=M.calendarAvailability({...base,date:'2026-11-19',airSource:'maiac'});assert.equal(result.available,false);
+ result=M.calendarAvailability({...base,date:'2026-11-19',airSource:'cams'});assert.equal(result.air,true);assert.equal(result.forecast,true);
+ result=M.calendarAvailability({...base,date:'2026-11-19',airSource:'cams',airPeriod:'daily'});assert.equal(result.available,false);
+ result=M.calendarAvailability({...base,date:'2026-09-16',airSource:'maiac'});assert.equal(result.air,false);
+});
+
+test('real NOAA-20/21 overlap uses six unique burning grids instead of seven component grids',{skip:!fs.existsSync(path.join(dataRoot,'ui/fire_index.json'))},()=>{
+ const zlib=require('node:zlib'),date='2026-08-13',sources=['VIIRS_NOAA20_NRT','VIIRS_NOAA21_NRT'];
+ const index=JSON.parse(fs.readFileSync(path.join(dataRoot,'ui/fire_index.json'),'utf8'));
+ const native=JSON.parse(fs.readFileSync(path.join(dataRoot,`fire/daily/${date}.json`),'utf8'));
+ const derived=JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(dataRoot,`ui/fire/${date}.json.gz`))).toString('utf8'));
+ const day={...native,selections:derived.selections},selected=M.fireSummary(day,sources),key=M.sourceKey(sources);
+ const row=index.daily.find(r=>r.date===date),expected=row.selections[key];
+ assert.equal(selected.gridCount,6);assert.equal(selected.cells.features.length,6);
+ assert.equal(selected.emissionKg,expected.emission_kg);
+ assert.ok(selected.emissionKg<row.selections[sources[0]].emission_kg+row.selections[sources[1]].emission_kg);
+ assert.equal(M.fireTimeSeries(index,date,date,sources,true,'hotspots')[0].value,selected.observations);
+ assert.equal(M.calendarAvailability({date,view:'fire',fireIndex:index,fireSources:sources}).fire,true);
+});

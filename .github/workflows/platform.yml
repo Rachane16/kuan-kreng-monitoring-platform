@@ -31,14 +31,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install exact geometry aggregation
+        run: python -m pip install shapely==2.1.2
       - name: Synchronize validated public data
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/sync_data.py
+      - name: Build validated satellite selections
+        run: python scripts/build_ui_data.py --data web/data
       - name: Check spatial matching and data selection
         run: |
           python -m unittest discover -s tests -p 'test_*.py' -v
-          node --test tests/model.test.cjs
+          node --test tests/model.test.cjs tests/charts.test.cjs
           node --check web/app.js
       - name: Preserve platform snapshots
         run: |

@@ -6,6 +6,14 @@
   'use strict';
   const EMPTY=()=>({type:'FeatureCollection',features:[]});
   const DAY=86400000;
+  const satellites=Object.freeze(['MODIS_NRT','VIIRS_SNPP_NRT','VIIRS_NOAA20_NRT','VIIRS_NOAA21_NRT']);
+  function selectionInfo(selection='ALL'){
+    if(selection!==null&&typeof selection!=='string'&&!Array.isArray(selection))throw Error('Invalid satellite selection');
+    const input=Array.isArray(selection)?selection:selection===null?[]:[selection];
+    const ids=[...new Set(input.flatMap(value=>value==='ALL'?satellites:typeof value==='string'?value.split('|').filter(Boolean):[]))].sort();
+    return {ids,key:ids.join('|'),all:ids.length===satellites.length&&satellites.every(id=>ids.includes(id))};
+  }
+  function sourceKey(selection='ALL'){return selectionInfo(selection).key;}
   const validDate=date=>/^\d{4}-\d{2}-\d{2}$/.test(date)&&new Date(date+'T00:00:00Z').toISOString().slice(0,10)===date;
   function dates(first,last){
     if(!validDate(first)||!validDate(last)||last<first)throw Error('Invalid calendar date range');
@@ -66,30 +74,56 @@
   }
   function stateName(value){return typeof value==='string'?value:value?.state;}
   const unavailableState=name=>['error','unavailable','not_configured','awaiting_key','missing'].includes(name);
+  function selectedFire(item,selection='ALL',compact=false){
+    const info=selectionInfo(selection);
+    if(!info.ids.length)return {...info,summary:null,state:'missing',derived:false};
+    const derived=item?.selections?.[info.key];
+    if(derived)return {...info,summary:derived,state:stateName(derived._state),derived:true};
+    // Mixed subsets require the backend's union of active cells. Adding satellite
+    // totals would count a shared burning cell more than once.
+    const originalKey=info.all?'ALL':info.ids.length===1?info.ids[0]:null;
+    const summary=originalKey?(item?.by_source?.[originalKey]||(compact&&originalKey==='ALL'?item:null)):null;
+    const state=originalKey==='ALL'?stateName(item?.data_state):stateName(item?.source_status?.[originalKey]);
+    return {...info,summary,state,derived:false};
+  }
+  function fireAssessment(picked){
+    const {summary,state,derived}=picked,count=summary?.observation_count??summary?.observations;
+    const available=!!summary&&!(derived&&state==='missing')&&!(unavailableState(state)&&!(count>0));
+    return {count,available,partial:available&&state!=='ok'};
+  }
   function fireSummary(day,source='ALL',peat=true){
-    const summary=day?.by_source?.[source],state=source==='ALL'?stateName(day?.data_state):stateName(day?.source_status?.[source]);
-    const count=summary?.observation_count??summary?.observations;
-    const available=!!summary&&!(unavailableState(state)&&!(count>0));
+    const picked=selectedFire(day,source),{summary}=picked,{count,available,partial}=fireAssessment(picked);
     const fc=value=>value?.type==='FeatureCollection'&&Array.isArray(value.features)?value:EMPTY();
-    const partial=available&&(state!=='ok'||(source==='ALL'&&day?.data_state!=='ok'));
     return {available,partial,observations:available?(count??null):null,gridCount:available?(summary.grid_count??null):null,
       clusterCount:available?(summary.cluster_count??null):null,areaHa:available?(summary.ground_area_ha??summary.area_ha??null):null,
       emissionKg:available?(peat?summary.emission_kg:summary.emission_without_peat_kg)??null:null,
       fuels:available?(summary.fuels||[]).filter(f=>peat||!f.peat_scenario):[],
       cells:available?fc(summary.cells):EMPTY(),clusters:available?fc(summary.clusters):EMPTY(),
-      hotspots:available?{type:'FeatureCollection',features:fc(day.hotspots).features.filter(f=>source==='ALL'||f.properties?.source===source)}:EMPTY(),
-      source,state:available?(partial?'partial':'ok'):'missing'};
+      hotspots:available?{type:'FeatureCollection',features:fc(day.hotspots).features.filter(f=>picked.all||picked.ids.includes(f.properties?.source))}:EMPTY(),
+      source,sources:picked.ids,state:available?(partial?'partial':'ok'):'missing'};
   }
-  function emissionSeries(index,first,last,source='ALL',peat=true){
+  function fireTimeSeries(index,first,last,source='ALL',peat=true,metric='emission'){
+    if(!['emission','observations','hotspots','count'].includes(metric))throw Error('Invalid fire chart metric');
     const saved=new Map((index?.daily||[]).map(row=>[row.date,row]));
     return dates(first,last).map(date=>{
-      const row=saved.get(date),summary=row?.by_source?.[source]||(source==='ALL'?row:null);
-      const state=source==='ALL'?stateName(row?.data_state):stateName(row?.source_status?.[source]);
-      const observations=summary?.observation_count??summary?.observations;
-      const missing=!summary||(unavailableState(state)&&!(observations>0));
-      const value=missing?null:(peat?summary.emission_kg:summary.emission_without_peat_kg);
-      return {date,value:Number.isFinite(value)?value:null,state:missing?'missing':state==='ok'?'ok':'partial',observations:observations??null};
+      const picked=selectedFire(saved.get(date),source,true),{summary}=picked,{count,available,partial}=fireAssessment(picked);
+      const value=!available?null:metric==='emission'?(peat?summary.emission_kg:summary.emission_without_peat_kg):count;
+      return {date,value:Number.isFinite(value)?value:null,state:available?(partial?'partial':'ok'):'missing',observations:available?(count??null):null};
     });
+  }
+  function emissionSeries(index,first,last,source='ALL',peat=true){return fireTimeSeries(index,first,last,source,peat,'emission');}
+  function calendarAvailability({date,view='overview',airSource='auto',airPeriod='auto',air={},fireIndex,fireSources='ALL',now=Date.now()}){
+    const selected=selectAir(air,{date,source:airSource,period:airPeriod,now}),airCount=cells(selected.day).length;
+    const airAvailable=selected.day.status==='Available'&&airCount>0;
+    const gridCount=(selected.source==='maiac'?air.maiac:air.cams)?.grid_count;
+    const airPartial=airAvailable&&Number.isFinite(gridCount)&&airCount<gridCount;
+    const row=fireIndex?.daily?.find(r=>r.date===date),picked=selectedFire(row,fireSources,true);
+    const {count,available:fireAvailable,partial:firePartial}=fireAssessment(picked);
+    const positive=fireAvailable&&Number.isFinite(count)&&count>0,zero=fireAvailable&&count===0;
+    const relevantFire=positive||zero;
+    const available=view==='air'?airAvailable:view==='fire'?relevantFire:airAvailable||relevantFire;
+    const partial=view==='air'?airPartial:view==='fire'?firePartial:(airAvailable&&airPartial)||(relevantFire&&firePartial);
+    return {air:airAvailable,fire:positive,fireZero:zero,partial,available,forecast:airAvailable&&selected.source==='cams'&&selected.period==='hourly'};
   }
   function airDailySeries(data,bundle,first,last,pollutant='pm25',source='auto'){
     const group=grids(bundle);
@@ -107,5 +141,5 @@
       return {date,value:null,source:source==='maiac'?'maiac':'cams',state:'missing',mode:null};
     });
   }
-  return {selectAir,airSummary,fireSummary,emissionSeries,airDailySeries,dates};
+  return {selectAir,airSummary,fireSummary,emissionSeries,airDailySeries,dates,sourceKey,satellites,fireTimeSeries,calendarAvailability};
 });
