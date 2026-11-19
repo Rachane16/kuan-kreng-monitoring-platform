@@ -73,3 +73,9 @@ python -m http.server 8770 --bind 127.0.0.1 --directory web
 ตัวเลือกเชื้อเพลิงหญ้า กระจูด เสม็ดขาว ข้าว และดินพรุ ควบคุมเฉพาะภาพซ้อนบนแผนที่ แต่ละชุดที่เลือกสร้างภาพแสดงผลแล้ว cache ไว้ จำกัด6ภาพ ภาพถูกตัดตามขอบเขตจริง ปุ่มรวมสถานการณ์ดินพรุ0–10ซม.ยังคงเป็นตัวเลือกการคำนวณแยกต่างหาก
 
 กราฟ Drop-line ใช้จุดแสดงค่าและเส้นประแนวดิ่งถึงฐานศูนย์ กราฟฝุ่นเลือก MAIAC/CAMS ของกราฟเองได้ กราฟไฟเลือกการปล่อย PM₂.₅ (kg) หรือจำนวนจุดความร้อน (รายการ) พร้อมช่วง30/60/92วัน ค่าศูนย์มีจุดอยู่บนฐาน ส่วนวันที่ไม่มีข้อมูลไม่มีจุดและแสดงเครื่องหมายขาดข้อมูล เลือกจุดด้วยเมาส์หรือ Enter/Space เพื่อเปิดวันนั้น
+
+## AirThai stations on the map
+
+The map station button opens only the six requested locations, their hourly PM2.5 popups, and an optional boundary-clipped station-IDW layer. This is measured atmospheric concentration in µg/m³, separate from AOD estimates and emission kg. No extra page section is added. Public station snapshots update with the existing GitHub schedule; no API key or open local computer is needed. See [the exact station/time/IDW contract](docs/AIRTHAI.md).
+
+Run `python scripts/sync_stations.py --data web/data` after source mirroring. Check the integration with `python -m unittest discover -s tests -p test_stations.py` and `node --test tests/stations.test.cjs`.

@@ -37,13 +37,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/sync_data.py
+      - name: Synchronize six public AirThai stations
+        run: python scripts/sync_stations.py --data web/data
       - name: Build validated satellite selections
         run: python scripts/build_ui_data.py --data web/data
       - name: Check spatial matching and data selection
         run: |
           python -m unittest discover -s tests -p 'test_*.py' -v
-          node --test tests/model.test.cjs tests/charts.test.cjs
+          node --test tests/model.test.cjs tests/charts.test.cjs tests/stations.test.cjs
           node --check web/app.js
+          node --check web/station-map.js
       - name: Preserve platform snapshots
         run: |
           git config user.name 'github-actions[bot]'
