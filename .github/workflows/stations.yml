@@ -24,6 +24,9 @@ jobs:
     steps:
       - name: Check out platform
         uses: actions/checkout@v4
+        with:
+          # Resolve main after acquiring the shared publication lock.
+          ref: main
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
