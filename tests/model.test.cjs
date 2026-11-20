@@ -185,3 +185,25 @@ test('real NOAA-20/21 overlap uses six unique burning grids instead of seven com
  assert.equal(M.fireTimeSeries(index,date,date,sources,true,'hotspots')[0].value,selected.observations);
  assert.equal(M.calendarAvailability({date,view:'fire',fireIndex:index,fireSources:sources}).fire,true);
 });
+
+test('VIIRS is daily observed data, keeps the selected day, and never borrows CAMS forecast hours',()=>{
+ const observed={date:'2026-11-19',status:'Available',available_cells:1,cells:[['v',.3,30,2]]};
+ const data={maiac:{days:[]},cams:{days:[]},viirs:{days:[observed]},forecast:{hours:[{valid_time:'2026-11-19T08:00:00Z',status:'Available',cells:[['x',.9,90]]}]}};
+ const selected=M.selectAir(data,{date:observed.date,source:'viirs',period:'hourly',now:'2026-11-19T08:00:00Z'});
+ assert.equal(selected.source,'viirs');assert.equal(selected.period,'daily');assert.equal(selected.selectedTime,null);assert.deepEqual(selected.day.cells,observed.cells);
+ const missing=M.selectAir(data,{date:'2026-11-18',source:'viirs'});assert.equal(missing.day.date,'2026-11-18');assert.equal(missing.day.status,'NotPublished');assert.deepEqual(missing.day.cells,[]);
+ assert.equal(M.selectAir(data,{date:observed.date}).source,'cams');
+ assert.equal(M.airSourceName('viirs'),'VIIRS NOAA');
+});
+test('VIIRS uses clipped 6 km reporting areas, marks partial coverage and retains zero',()=>{
+ const native=fc(['v','w'].map((id,i)=>({type:'Feature',properties:{grid_id:id,overlap_m2:i?3:1},geometry:{type:'Polygon',coordinates:[]}})));
+ const day={date:'2026-11-19',status:'Available',available_cells:1,cells:[['v',0,0,1]]};
+ const grids={...bundle,viirs:native};
+ const selected=M.selectAir({viirs:{days:[day]}},{date:day.date,source:'viirs'});
+ const summary=M.airSummary(selected,grids);
+ assert.equal(summary.mode,'viirs');assert.equal(summary.mean,0);assert.equal(summary.coverageFraction,.25);assert.equal(summary.partial,true);assert.equal(summary.sampler,null);
+ const series=M.airDailySeries({viirs:{days:[day]}},grids,day.date,'2026-11-20','pm25','viirs');
+ assert.deepEqual(series.map(row=>row.value),[0,null]);assert.equal(series[0].state,'partial');assert.equal(series[0].coverageFraction,.25);
+ const marks=M.calendarAvailability({date:day.date,view:'air',airSource:'viirs',air:{viirs:{grid_count:2,days:[day]}},now:'2026-11-19T08:00:00Z'});
+ assert.equal(marks.air,true);assert.equal(marks.partial,true);assert.equal(marks.forecast,false);
+});
