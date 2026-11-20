@@ -367,7 +367,7 @@ $('include-peat').addEventListener('change',()=>{state.peat=$('include-peat').ch
     $('close-emission-details').addEventListener('click',()=>{$('emission-dialog').close();});
     $('emission-dialog').addEventListener('click',event=>{if(event.target===$('emission-dialog')){const r=$('emission-dialog').getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)$('emission-dialog').close();}});
     $('emission-dialog').addEventListener('close',()=>{$('open-emission-details').focus({preventScroll:true});});
-    for(const kind of ['air','layers','stations'])$('map-'+kind+'-toggle').addEventListener('click',()=>{const open=$('map-'+kind+'-panel').hidden;closeMapPanels();$('map-'+kind+'-panel').hidden=!open;$('map-'+kind+'-toggle').setAttribute('aria-expanded',String(open));});
+    for(const kind of ['air','layers','stations'])$('map-'+kind+'-toggle').addEventListener('click',()=>{const open=$('map-'+kind+'-panel').hidden;closeMapPanels();$('map-'+kind+'-panel').hidden=!open;$('map-'+kind+'-toggle').setAttribute('aria-expanded',String(open));if(open&&kind==='stations')stationMap?.refresh();});
     for(const button of document.querySelectorAll('[data-close-map-panel]'))button.addEventListener('click',()=>closeMapPanels(true));
     document.addEventListener('click',event=>{if(!event.target.closest('.map-tool-panel,.map-floating-tools'))closeMapPanels();});
     document.addEventListener('keydown',event=>{if(event.key==='Escape')closeMapPanels(true);});

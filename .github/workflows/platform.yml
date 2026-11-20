@@ -44,9 +44,10 @@ jobs:
       - name: Check spatial matching and data selection
         run: |
           python -m unittest discover -s tests -p 'test_*.py' -v
-          node --test tests/model.test.cjs tests/charts.test.cjs tests/stations.test.cjs
+          node --test tests/model.test.cjs tests/charts.test.cjs tests/stations.test.cjs tests/station-live.test.cjs
           node --check web/app.js
           node --check web/station-map.js
+          node --check web/station-live.js
       - name: Preserve platform snapshots
         run: |
           git config user.name 'github-actions[bot]'

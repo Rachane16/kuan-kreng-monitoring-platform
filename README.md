@@ -76,8 +76,15 @@ python -m http.server 8770 --bind 127.0.0.1 --directory web
 
 ## AirThai stations on the map
 
-The map station button opens only the six requested locations, their hourly PM2.5 popups, and an optional boundary-clipped station-IDW layer. This is measured atmospheric concentration in µg/m³, separate from AOD estimates and emission kg. No extra page section is added. Public station snapshots update with the existing GitHub schedule; no API key or open local computer is needed. See [the exact station/time/IDW contract](docs/AIRTHAI.md).
+The map station button opens only the six requested locations, their hourly PM2.5 popups, and an optional boundary-clipped station-IDW layer. This is measured atmospheric concentration in µg/m³, separate from AOD estimates and emission kg. No extra page section is added. Live minute markers call the public API directly while viewing, and completed-hour IDW stays synchronized across stations. Hourly station archives update with a dedicated15minute GitHub schedule plus the regular platform schedule; no API key or open local computer is needed for archival. See [the exact station/time/IDW contract](docs/AIRTHAI.md).
 
 Run `python scripts/sync_stations.py --data web/data` after source mirroring. Check the integration with `python -m unittest discover -s tests -p test_stations.py` and `node --test tests/stations.test.cjs`.
 
 ส่วนเกี่ยวกับข้อมูลเปิดเป็นหน้าต่างย่อที่เลื่อนอ่านได้ พร้อมลิงก์ GitHub อยู่ภายใน การเปิดหรือปิดหน้าต่างไม่เปลี่ยนวัน แหล่งข้อมูล หรือชั้นแผนที่ที่เลือก กล่องค่าฝุ่นอยู่เหนือวันเวลาบนแผนที่ เกณฑ์สีแสดงเป็นการ์ดที่ปรับจำนวนคอลัมน์ตามพื้นที่ โดยคงช่วงตัวเลขและสีเดิม จุดสถานีเริ่มต้นซ่อนและเปิดเองได้ (ลิงก์ที่ระบุ `stations=1` ยังคงเปิดตามตัวเลือกนั้น) สถานะ FIRMS บางส่วนแสดงในรายละเอียดชุดข้อมูลแทนแถบแจ้งทั่วไป
+
+
+### AirThai near-real-time
+
+หมุดสถานีโหมดล่าสุดดึงค่ารายนาทีจริงจาก API โดยตรงทุก1นาทีเมื่อเปิดดู พร้อมเวลาตรวจวัดและอายุข้อมูล ไม่รอ GitHub ค่าในหมุดอาจต่างจากเว็บต้นทางที่แสดงค่าเฉลี่ยรายชั่วโมง IDW ยังคงใช้ข้อมูลชั่วโมงที่ครบแล้วของสถานีในขอบเขตในช่วงเดียวกัน และเมื่อเปิด IDW หมุดจะใช้ช่วงเดียวกับผืนสี ปุ่มกลับสู่ค่าล่าสุดช่วยออกจากการเลือกย้อนหลัง
+
+เมื่อ API ใช้ไม่ได้จะแสดงข้อมูลสำรองพร้อมเวลาและสถานะ ไม่เปลี่ยนข้อมูลเก่าให้เป็นข้อมูลสด งาน `stations.yml` แยกเก็บย้อนหลังและเผยแพร่ทุก15นาทีตามกำหนด GitHub (อาจล่าช้าหรือข้ามรอบ) ส่วนหน้าเว็บดึง API เอง จึงไม่ขึ้นกับรอบดังกล่าวและไม่ต้องเพิ่ม API key รายละเอียดอยู่ใน `docs/AIRTHAI.md`
