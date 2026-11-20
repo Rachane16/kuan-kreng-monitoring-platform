@@ -21,7 +21,7 @@
       axis.append(svg('text',{x:l.left-10,y:y+4,'text-anchor':'end',class:'plot-axis-label'},new Intl.NumberFormat('en-US',{maximumFractionDigits:value<10?1:0,notation:value>=100000?'compact':'standard'}).format(value)));
     }
     l.points.forEach((point,index)=>{
-      const r=point.row,known=point.y!==null,title=`${dateText(r.date)} · ${known?format(r.value):'ไม่มีข้อมูล'}${known?' '+unit:''}${r.source?' · '+(r.source==='viirs'?'VIIRS NOAA':r.source.toUpperCase()):''}${r.state==='partial'?' · ข้อมูลบางส่วน':''}`;
+      const r=point.row,known=point.y!==null,title=`${dateText(r.date)} · ${known?format(r.value):'ไม่มีข้อมูล'}${known?' '+unit:''}${r.source?' · '+r.source.toUpperCase():''}${r.state==='partial'?' · ข้อมูลบางส่วน':''}`;
       const group=svg('g',{class:`drop-point${r.date===selectedDate?' selected':''}${r.state==='partial'?' partial':''}`,'data-date':r.date,role:'button',tabindex:'0','aria-label':title,'aria-pressed':String(r.date===selectedDate)});
       group.append(svg('title',{},title));group.append(svg('rect',{x:point.x-l.step/2,y:l.top,width:l.step,height:l.base-l.top+10,class:'plot-hitbox'}));
       if(known){group.append(svg('line',{x1:point.x,x2:point.x,y1:point.y,y2:l.base,class:'drop-line',stroke:color}));group.append(svg('circle',{cx:point.x,cy:point.y,r:r.date===selectedDate?4.5:3.3,fill:color}));}

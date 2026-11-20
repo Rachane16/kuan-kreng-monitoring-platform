@@ -28,15 +28,15 @@
     const {date,source='auto',period='auto',validTime=null,now=Date.now()}=options||{};
     if(!validDate(date))throw Error('Invalid selected calendar date');
     const maiac=findDay(data.maiac,date),selected=source==='auto'?(cells(maiac).length?'maiac':'cams'):source;
-    if(!['maiac','cams','viirs'].includes(selected))throw Error('Invalid air source');
+    if(!['maiac','cams'].includes(selected))throw Error('Invalid air source');
     if(!['auto','daily','hourly'].includes(period))throw Error('Invalid air period');
-    const mode=selected!=='cams'?'daily':period==='auto'?(date>=D.thaiDay(now)?'hourly':'daily'):period;
+    const mode=selected==='maiac'?'daily':period==='auto'?(date>=D.thaiDay(now)?'hourly':'daily'):period;
     const availableHours=(data.forecast?.hours||[]).filter(hour=>hour.valid_time&&D.thaiDay(hour.valid_time)===date&&hour.status==='Available'&&cells(hour).length).sort((a,b)=>Date.parse(a.valid_time)-Date.parse(b.valid_time));
     if(mode==='hourly'){
       const hour=availableHours.find(h=>h.valid_time===validTime)||D.nearest(availableHours,now);
       return {source:selected,period:mode,day:hour?{...hour,date}:blank(date),availableHours,selectedTime:hour?.valid_time||null};
     }
-    return {source:selected,period:mode,day:(selected==='maiac'?maiac:findDay(data[selected],date))||blank(date),availableHours,selectedTime:null};
+    return {source:selected,period:mode,day:(selected==='maiac'?maiac:findDay(data.cams,date))||blank(date),availableHours,selectedTime:null};
   }
   const geometryCache=new WeakMap(),idwCache=new WeakMap();
   function gridInfo(grid){
@@ -58,9 +58,9 @@
     const result={points,sampler,values};cache.set(day,result);return result;
   }
   function airSummary(selection,bundle,pollutant='pm25',view='idw'){
-    const group=grids(bundle),native=selection.source!=='maiac',grid=group[selection.source];
+    const group=grids(bundle),native=selection.source==='cams',grid=native?group.cams:group.maiac;
     const info=gridInfo(grid),samples=cells(selection.day),sourceValues=new Map(samples.map(c=>[c[0],c[2]]));
-    let values=sourceValues,sourcePoints=[],sampler=null,mode=native?selection.source:'source';
+    let values=sourceValues,sourcePoints=[],sampler=null,mode=native?'cams':'source';
     if(!native&&grid){
       const indexed=interpolation(selection.day,grid);sourcePoints=indexed.points;
       if(view==='idw'&&indexed.sampler){values=indexed.values;sampler=indexed.sampler;mode='idw';}
@@ -115,7 +115,7 @@
   function calendarAvailability({date,view='overview',airSource='auto',airPeriod='auto',air={},fireIndex,fireSources='ALL',now=Date.now()}){
     const selected=selectAir(air,{date,source:airSource,period:airPeriod,now}),airCount=cells(selected.day).length;
     const airAvailable=selected.day.status==='Available'&&airCount>0;
-    const gridCount=air[selected.source]?.grid_count;
+    const gridCount=(selected.source==='maiac'?air.maiac:air.cams)?.grid_count;
     const airPartial=airAvailable&&Number.isFinite(gridCount)&&airCount<gridCount;
     const row=fireIndex?.daily?.find(r=>r.date===date),picked=selectedFire(row,fireSources,true);
     const {count,available:fireAvailable,partial:firePartial}=fireAssessment(picked);
@@ -128,10 +128,6 @@
   function airDailySeries(data,bundle,first,last,pollutant='pm25',source='auto'){
     const group=grids(bundle);
     return dates(first,last).map(date=>{
-      if(source==='viirs'){
-        const day=findDay(data.viirs,date),summary=airSummary({source:'viirs',period:'daily',day},group,pollutant,'source');
-        return {date,value:summary.mean,source:'viirs',state:summary.available?(summary.partial?'partial':'ok'):'missing',mode:'viirs',coverageFraction:summary.coverageFraction};
-      }
       const maiac=findDay(data.maiac,date),cams=findDay(data.cams,date);
       if(source!=='cams'&&maiac&&cells(maiac).length&&group.maiac){
         const summary=airSummary({source:'maiac',period:'daily',day:maiac},group,pollutant,'idw');
@@ -145,6 +141,5 @@
       return {date,value:null,source:source==='maiac'?'maiac':'cams',state:'missing',mode:null};
     });
   }
-  const airSourceName=source=>source==='viirs'?'VIIRS NOAA':String(source).toUpperCase();
-  return {airSourceName,selectAir,airSummary,fireSummary,emissionSeries,airDailySeries,dates,sourceKey,satellites,fireTimeSeries,calendarAvailability};
+  return {selectAir,airSummary,fireSummary,emissionSeries,airDailySeries,dates,sourceKey,satellites,fireTimeSeries,calendarAvailability};
 });

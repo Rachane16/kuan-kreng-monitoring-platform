@@ -25,7 +25,7 @@ from urllib.request import Request, urlopen
 SOURCES = {
     'air': {'repository': 'Rachane16/kuan-kreng-maiac-pm25', 'prefix': 'docs/data/',
             'required': ['history.json', 'grid.geojson', 'boundary.geojson', 'cams_history.json',
-                         'cams_grid.geojson', 'cams_forecast.json'], 'optional': ['viirs_history.json', 'viirs_grid.geojson']},
+                         'cams_grid.geojson', 'cams_forecast.json']},
     'fire': {'repository': 'Rachane16/kuan-kreng-grid-emission', 'prefix': 'web/data/',
              'required': ['project.json', 'parameters.json', 'index.json', 'status.json',
                           'study_area.geojson', 'study_grid.geojson.gz', 'landuse_layers.geojson.gz']},
@@ -221,40 +221,6 @@ def validate_air(root):
             raise ValueError('CAMS forecast valid time/reference/lead differs')
     updates.append(payload['generated_at_utc']);iso_time(updates[-1])
     coverages['forecast'] = {'start_time': hours[0]['valid_time'], 'end_time': hours[-1]['valid_time'], 'base_time': payload['forecast_base_time'], 'hours': len(hours)}
-    if (root/'viirs_history.json').exists() or (root/'viirs_grid.geojson').exists():
-        viirs = read_json(root/'viirs_history.json')
-        viirs_grid = read_json(root/'viirs_grid.geojson')
-        viirs_ids = grid_ids(viirs_grid, expected_count=None)
-        if (viirs.get('satellites') != ['NOAA20', 'NOAA21'] or viirs.get('version') != '2.1'
-                or viirs.get('aod_wavelength_nm') != 550 or viirs.get('reporting_grid_m') != 6000
-                or viirs.get('time_zone') != 'Asia/Bangkok' or viirs.get('qa_flags') != [2, 3]
-                or viirs.get('grid_count') != len(viirs_ids) or not 1 <= len(viirs_ids) <= 150):
-            raise ValueError('VIIRS NOAA product/platform/grid metadata differs')
-        from shapely.geometry import shape
-        from shapely.ops import unary_union
-        boundary = unary_union([shape(f['geometry']) for f in read_json(root/'boundary.geojson')['features']])
-        # Centimetre-scale tolerance for split-edge round trips through UTM/WGS84.
-        for feature in viirs_grid['features']:
-            props = feature['properties']
-            if (not re.fullmatch(r'VIIRS_E\d+_N\d+', props['grid_id']) or props.get('reporting_grid_m') != 6000
-                    or not is_number(props.get('overlap_m2')) or props['overlap_m2'] <= 0
-                    or not boundary.buffer(1e-7).covers(shape(feature['geometry']))):
-                raise ValueError('VIIRS grid extends beyond study boundary or has invalid area')
-        viirs_days = validate_air_records(viirs.get('days', []), viirs_ids,
-            {'Available', 'NoData', 'NotPublished', 'NotChecked'})
-        if (not viirs_days or viirs.get('start_date') != min(viirs_days) or viirs.get('end_date') != max(viirs_days)
-                or len(viirs_days) != (date.fromisoformat(max(viirs_days))-date.fromisoformat(min(viirs_days))).days+1):
-            raise ValueError('VIIRS daily coverage metadata differs')
-        for row in viirs['days']:
-            if set(row.get('satellites', []))-{'NOAA20', 'NOAA21'}:
-                raise ValueError('Unsupported VIIRS platform')
-            for timestamp in row.get('observation_times_utc', []):
-                if (iso_time(timestamp)+timedelta(hours=7)).date().isoformat() != row['date']:
-                    raise ValueError('VIIRS observation outside selected Thai day')
-        iso_time(viirs['generated_at_utc'])
-        updates.append(viirs['generated_at_utc'])
-        coverages['viirs'] = {'start_date': min(viirs_days), 'end_date': max(viirs_days),
-            'days': len(viirs_days), 'state': viirs.get('state'), 'pending_days': viirs.get('pending_days', 0)}
     return {'upstream_updated_at_utc': max(updates, key=iso_time), 'coverage': coverages,
             'grid_count': len(ids), 'cams_grid_count': len(cams_ids)}
 
@@ -330,7 +296,7 @@ def selected_paths(source, tree):
         if item.get('type') != 'blob' or not item.get('path', '').startswith(prefix):
             continue
         relative = item['path'][len(prefix):]
-        curated = relative in config['required'] or relative in config.get('optional', [])
+        curated = relative in config['required']
         if source == 'fire':
             curated = curated or relative == 'import_status.json' or bool(re.fullmatch(r'daily/\d{4}-\d{2}-\d{2}\.json', relative))
         if not curated:
@@ -338,9 +304,6 @@ def selected_paths(source, tree):
         if item.get('size', 0) > MAX_FILE_BYTES:
             raise ValueError('Upstream curated file exceeds size limit')
         selected[relative] = {'blob_sha': item['sha'], 'size': item.get('size', 0)}
-    optional = set(config.get('optional', []))
-    if optional & set(selected) and not optional <= set(selected):
-        raise ValueError('Incomplete optional VIIRS snapshot pair')
     missing = set(config['required'])-set(selected)
     if missing:
         raise ValueError('Missing required upstream files: '+', '.join(sorted(missing)))

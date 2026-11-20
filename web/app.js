@@ -4,16 +4,16 @@
 const $=id=>document.getElementById(id),D=KKData,M=PlatformModel;
 const SOURCE_NAMES={ALL:'ทุกดาวเทียม',MODIS_NRT:'MODIS Terra / Aqua',VIIRS_SNPP_NRT:'VIIRS S-NPP',VIIRS_NOAA20_NRT:'VIIRS NOAA-20',VIIRS_NOAA21_NRT:'VIIRS NOAA-21'};
 const FUELS={GRASS:['หญ้า','#a3ae63'],LEPIRONIA:['กระจูด','#56a894'],M_CAJU_SURFACE_LOWLAND:['เชื้อเพลิงผิวดินในป่าเสม็ด','#4b7955'],M_CAJU_LEAVES_BARK_LOWLAND:['ใบและเปลือกเสม็ดขาว','#9abc8e'],M_CAJU:['เสม็ดขาว','#608a5e'],PADDY:['ข้าว','#d0b05b'],PEAT:['ดินพรุ 0–10 ซม.','#ab8565']};
-const VIEWS={overview:['OVERVIEW','KUAN KRENG MONITORING PLATFORM','เชื่อมข้อมูลฝุ่นในอากาศ จุดความร้อน และการปล่อยฝุ่นไว้ในพื้นที่เดียว'],air:['AIR CONCENTRATION','การประมาณค่าฝุ่น','ค่าประเมินจาก MAIAC, CAMS และ VIIRS NOAA พร้อมข้อมูลย้อนหลังและพยากรณ์จาก CAMS'],fire:['FIRE & EMISSIONS','จุดความร้อนและการปล่อยฝุ่น','จุดความร้อนจากดาวเทียมและสถานการณ์การปล่อย PM₂.₅ จากเชื้อเพลิง']};
+const VIEWS={overview:['OVERVIEW','KUAN KRENG MONITORING PLATFORM','เชื่อมข้อมูลฝุ่นในอากาศ จุดความร้อน และการปล่อยฝุ่นไว้ในพื้นที่เดียว'],air:['AIR CONCENTRATION','การประมาณค่าฝุ่น','ค่าประเมินจาก MAIAC และ CAMS พร้อมผืนสีต่อเนื่องและพยากรณ์ล่วงหน้า'],fire:['FIRE & EMISSIONS','จุดความร้อนและการปล่อยฝุ่น','จุดความร้อนจากดาวเทียมและสถานการณ์การปล่อย PM₂.₅ จากเชื้อเพลิง']};
 const safe=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(value,d=2)=>Number.isFinite(value)?new Intl.NumberFormat('en-US',{maximumFractionDigits:d,minimumFractionDigits:0}).format(value):'—';
 const dateText=date=>new Date(date+'T00:00:00Z').toLocaleDateString('th-TH',{timeZone:'UTC',day:'numeric',month:'short',year:'numeric'});
 const timeText=time=>time?new Date(time).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}):'—';
 const shift=(date,n)=>new Date(Date.parse(date+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
 const query=new URLSearchParams(location.search),initialView=location.hash.slice(1);
-const state={view:VIEWS[initialView]?initialView:'overview',date:query.get('date')||D.thaiDay(),airChoice:['maiac','cams','viirs'].includes(query.get('source'))?query.get('source'):'auto',pollutant:['pm1','pm01'].includes(query.get('pollutant'))?query.get('pollutant'):'pm25',airView:query.get('display')==='source'?'source':'idw',period:['daily','hourly'].includes(query.get('period'))?query.get('period'):'auto',validTime:query.get('at'),fireSources:query.has('satellite')?(query.get('satellite')==='ALL'?[...M.satellites]:query.get('satellite').split('|').filter(id=>M.satellites.includes(id))):[...M.satellites],peat:query.get('peat')!=='0',followNow:!query.has('at'),airChartSource:['maiac','cams','viirs'].includes(query.get('air_chart'))?query.get('air_chart'):null,fireMetric:query.get('fire_metric')==='hotspots'?'hotspots':'emission',fuelTypes:query.has('fuels')?query.get('fuels').split('|').filter(id=>['GRASS','LEPIRONIA','M_CAJU','PADDY','PEAT'].includes(id)):['GRASS','LEPIRONIA','M_CAJU','PADDY']};
+const state={view:VIEWS[initialView]?initialView:'overview',date:query.get('date')||D.thaiDay(),airChoice:['maiac','cams'].includes(query.get('source'))?query.get('source'):'auto',pollutant:['pm1','pm01'].includes(query.get('pollutant'))?query.get('pollutant'):'pm25',airView:query.get('display')==='source'?'source':'idw',period:['daily','hourly'].includes(query.get('period'))?query.get('period'):'auto',validTime:query.get('at'),fireSources:query.has('satellite')?(query.get('satellite')==='ALL'?[...M.satellites]:query.get('satellite').split('|').filter(id=>M.satellites.includes(id))):[...M.satellites],peat:query.get('peat')!=='0',followNow:!query.has('at'),airChartSource:['maiac','cams'].includes(query.get('air_chart'))?query.get('air_chart'):null,fireMetric:query.get('fire_metric')==='hotspots'?'hotspots':'emission',fuelTypes:query.has('fuels')?query.get('fuels').split('|').filter(id=>['GRASS','LEPIRONIA','M_CAJU','PADDY','PEAT'].includes(id)):['GRASS','LEPIRONIA','M_CAJU','PADDY']};
 let data,gridBundle,airSelection,airSummary,fireDay,fireSummary,airSeries=[],fireSeries=[];
-let map,referenceLayer,camsLayer,viirsLayer,fireLayer,hotspotLayer,fuelLayer,surfaceLayer,baseLayer,baseLayers,projection;
+let map,referenceLayer,camsLayer,fireLayer,hotspotLayer,fuelLayer,surfaceLayer,baseLayer,baseLayers,projection;
 let dates=[],gridById,crossByAir,crossByFire,fireCells=new Map(),dayCache=new Map(),surfaceCache=new Map();
 let dayJob=0,surfaceJob=0,fuelJob=0,fuelDataPromise=null,toastTimer=null,calendarMonth=null;
 const fuelImageCache=new Map();
@@ -41,14 +41,14 @@ function rawValueAt(airId,latlng){
   }
   let point;
   if(latlng)point=[latlng.lng,latlng.lat];else{const p=gridById.get(airId)?.properties;if(!p)return null;point=projection.inverse([p.sample_x,p.sample_y]);}
-  const feature=(airSelection.source==='viirs'?data.viirsGrid:data.camsGrid).features.find(f=>withinGeometry(point,f.geometry));
+  const feature=data.camsGrid.features.find(f=>withinGeometry(point,f.geometry));
   return feature?airSummary.values.get(feature.properties.grid_id)??null:null;
 }
 function popup(airId,latlng,providedFire=null,cluster=false){
   const cross=crossByAir.get(airId),p=providedFire||fireCells.get(cross?.fire_id);
   const fromStation=stationMap?.active,raw=fromStation?stationMap.sample(airId,latlng):rawValueAt(airId,latlng),value=fromStation?raw:D.concentration(raw,state.pollutant);
   const fireValue=p?(state.peat?p.emission_kg:p.emission_without_peat_kg):fireSummary?.available?0:null;
-  const source=fromStation?'AIRTHAI':M.airSourceName(airSelection.source),airTime=fromStation?stationMap.timeLabel:airSelection.period==='hourly'?timeText(airSelection.selectedTime)+' น.':dateText(state.date)+(source==='MAIAC'?' · วันผลิตภัณฑ์ UTC':' · วันไทย');
+  const source=fromStation?'AIRTHAI':airSelection.source.toUpperCase(),airTime=fromStation?stationMap.timeLabel:airSelection.period==='hourly'?timeText(airSelection.selectedTime)+' น.':dateText(state.date)+(source==='MAIAC'?' · วันผลิตภัณฑ์ UTC':' · วันไทย');
   const rows=(p?.fuels||[]).filter(f=>f.area_ha>0&&(state.peat||!f.peat_scenario)).map(f=>`<tr><td>${safe(FUELS[f.code]?.[0]||f.code)}</td><td>${fmt(f.emission_kg,2)} kg</td></tr>`).join('');
   return `<div class="popup-heading">${cluster?'กลุ่มกริดไฟและตำแหน่งที่เลือก':'ข้อมูล ณ ตำแหน่งที่เลือก'}</div><div class="popup-grid">${safe(airId||'')}${p?.grid_id?' / '+safe(p.grid_id):''}${cluster?' / '+safe(p.cluster_id):''}</div>`+
     `<div class="popup-stat"><span>${fromStation?'PM₂.₅':D.labels[state.pollutant]} ประเมิน · ${source}${fromStation||airSummary.mode==='idw'?' / IDW':''}</span><strong>${fmt(value,2)}<small>µg/m³</small></strong><div class="popup-meta">${safe(airTime)}</div></div>`+
@@ -71,7 +71,6 @@ function configureMap(){
     });
   }}).addTo(map);
   camsLayer=L.geoJSON(data.camsGrid,{pane:'air',interactive:false,style:{weight:.5,color:'#688a77',fillOpacity:.62}});
-  viirsLayer=L.geoJSON(data.viirsGrid,{pane:'air',interactive:false,style:{weight:.5,color:'#688a77',fillOpacity:.62}});
   const line={fill:false,dashArray:'8 6',pane:'boundary',interactive:false,lineCap:'round',lineJoin:'round'};
   L.geoJSON(data.boundary,{pane:'boundary',interactive:false,style:{...line,color:'#fff',weight:4.5,opacity:.9}}).addTo(map);
   L.geoJSON(data.boundary,{pane:'boundary',interactive:false,style:{...line,color:'#315d45',weight:2,opacity:1}}).addTo(map);
@@ -98,8 +97,8 @@ function drawMap(){
     const fill=airOn&&!fromStation&&maiac&&airSummary.mode==='source';
     layer.setStyle({color:'#6e8b70',weight:gridOn?.65:fill?.45:0,opacity:gridOn?.55:.35,fillColor:color(raw),fillOpacity:fill?(valid?.73:.16):0});
   });
-  for(const layerGroup of [camsLayer,viirsLayer])layerGroup.eachLayer(layer=>{const raw=airSummary.values.get(layer.feature.properties.grid_id);layer.setStyle({fillColor:color(raw),fillOpacity:D.concentration(raw,state.pollutant)!==null?.62:0,opacity:D.concentration(raw,state.pollutant)!==null?.5:0});});
-  showLayer(camsLayer,airOn&&airSelection.source==='cams'&&!fromStation);showLayer(viirsLayer,airOn&&airSelection.source==='viirs'&&!fromStation);drawSurface();stationMap?.render(airOn);
+  camsLayer.eachLayer(layer=>{const raw=airSummary.values.get(layer.feature.properties.grid_id);layer.setStyle({fillColor:color(raw),fillOpacity:D.concentration(raw,state.pollutant)!==null?.62:.15});});
+  showLayer(camsLayer,airOn&&!maiac&&!fromStation);drawSurface();stationMap?.render(airOn);
   if(fireLayer)map.removeLayer(fireLayer);if(hotspotLayer)map.removeLayer(hotspotLayer);fireLayer=null;hotspotLayer=null;
   fireCells=new Map((fireSummary?.cells?.features||[]).map(f=>[f.properties.grid_id,f.properties]));
   if(fireSummary?.available){
@@ -122,8 +121,8 @@ function drawMap(){
   for(const entry of document.querySelectorAll('[data-legend-layer]'))entry.hidden=!$(entry.dataset.legendLayer).checked;
   const showEmpty=(!airOn||!shownAvailable)&&(!$('show-fire').checked&&!$('show-hotspots').checked||!fireSummary?.available||!fireSummary.gridCount);
   $('map-empty').hidden=!showEmpty;
-  $('map-empty').textContent=airOn&&!fromStation&&airSelection.source==='viirs'&&!airSummary.available?'ยังไม่มี AOD ผ่าน QA ของ VIIRS NOAA ภายในขอบเขตสำหรับวันที่เลือก':fromStation&&!shownAvailable?'IDW สถานีต้องมีอย่างน้อย 3 จุดในขอบเขตที่ใช้ได้ในชั่วโมงเดียวกัน':dayJobLoading?'กำลังโหลดข้อมูลไฟของวันที่เลือก…':!airSummary.available&&!fireSummary?.available?'ไม่มีข้อมูลที่ใช้ได้สำหรับวันที่เลือก':fireSummary?.available&&!fireSummary.gridCount?'ไม่พบจุดความร้อนในข้อมูลที่ได้รับ'+(fireSummary.partial?' · บางแหล่งข้อมูลยังไม่ครบ':''):'เปิดชั้นข้อมูลเพื่อดูแผนที่';
-  $('map-source-badge').textContent=[airOn?(fromStation?'AIRTHAI / IDW · PM₂.₅':M.airSourceName(airSelection.source)+(airSummary.mode==='idw'?' / IDW':'')):'',$('show-fire').checked?'FIRMS / EMISSION':''].filter(Boolean).join(' · ');
+  $('map-empty').textContent=fromStation&&!shownAvailable?'IDW สถานีต้องมีอย่างน้อย 3 จุดในขอบเขตที่ใช้ได้ในชั่วโมงเดียวกัน':dayJobLoading?'กำลังโหลดข้อมูลไฟของวันที่เลือก…':!airSummary.available&&!fireSummary?.available?'ไม่มีข้อมูลที่ใช้ได้สำหรับวันที่เลือก':fireSummary?.available&&!fireSummary.gridCount?'ไม่พบจุดความร้อนในข้อมูลที่ได้รับ'+(fireSummary.partial?' · บางแหล่งข้อมูลยังไม่ครบ':''):'เปิดชั้นข้อมูลเพื่อดูแผนที่';
+  $('map-source-badge').textContent=[airOn?(fromStation?'AIRTHAI / IDW · PM₂.₅':airSelection.source.toUpperCase()+(airSummary.mode==='idw'?' / IDW':'')):'',$('show-fire').checked?'FIRMS / EMISSION':''].filter(Boolean).join(' · ');
   syncMapTools();renderMapAirValue();
   $('map-date-label').textContent=fromStation?stationMap.timeLabel:airOn&&airSelection.period==='hourly'&&airSelection.selectedTime?timeText(airSelection.selectedTime)+' น.':dateText(state.date);
 }
@@ -144,7 +143,7 @@ function renderMapAirValue(){
   $('map-value-title').textContent=mapPoint?'ค่าประมาณ ณ จุดที่เลือก':!fromStation&&airSummary.partial?'เฉลี่ยเฉพาะช่องที่มีข้อมูล':'ค่าประมาณเฉลี่ยพื้นที่';
   $('map-value-reset').hidden=!mapPoint;$('map-value-pollutant').textContent=D.labels[pollutant];$('map-value-number').textContent=fmt(value,2);
   $('map-value-status').textContent=!known?'ไม่มีข้อมูลที่ใช้ได้':pollutant==='pm25'?['ดีมาก','ดี','ปานกลาง','เริ่มมีผลต่อสุขภาพ','มีผลต่อสุขภาพ'][rank]:'สีเบื้องต้น ระดับ '+(rank+1);
-  $('map-value-support').textContent=fromStation?'AirThai · IDW '+(stationMap.summary?.pointCount||0)+' สถานีในขอบเขต':M.airSourceName(airSelection.source)+(airSummary.mode==='idw'?' / IDW':'')+' · '+(state.pollutant==='pm25'?'ค่าประมาณจากแบบจำลอง':'ยังไม่เชื่อมโยงผลต่อสุขภาพ');
+  $('map-value-support').textContent=fromStation?'AirThai · IDW '+(stationMap.summary?.pointCount||0)+' สถานีในขอบเขต':airSelection.source.toUpperCase()+(airSummary.mode==='idw'?' / IDW':'')+' · '+(state.pollutant==='pm25'?'ค่าประมาณจากแบบจำลอง':'ยังไม่เชื่อมโยงผลต่อสุขภาพ');
   const mouths=['M13 23Q20 32 27 23','M14 24Q20 29 26 24','M14 25H26','M14 27Q20 21 26 27','M13 28Q20 18 27 28'];
   $('map-value-icon').innerHTML=known?`<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="${hex}"/><g fill="#254c3c"><circle cx="14" cy="16" r="1.8"/><circle cx="26" cy="16" r="1.8"/></g><path d="${pollutant==='pm25'?mouths[rank]:mouths[2]}" fill="none" stroke="#254c3c" stroke-width="2" stroke-linecap="round"/></svg>`:'<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#e1e8df"/><path d="M14 20h12" stroke="#70826b" stroke-width="2" stroke-linecap="round"/></svg>';
 }
@@ -158,15 +157,12 @@ function renderLegend(){
 function renderControls(){
   $('date-input').value=state.date;$('prev-day').disabled=state.date===dates[0];$('next-day').disabled=state.date===dates.at(-1);
   $('selected-day').textContent=dateText(state.date);
-  $('time-context').textContent=airSelection.source==='maiac'?'MAIAC: วันผลิตภัณฑ์ UTC · ข้อมูลไฟ: วันไทย':(airSelection.source==='viirs'?'VIIRS NOAA และข้อมูลไฟ: วันไทย (UTC+7)':'CAMS และข้อมูลไฟ: วันไทย (UTC+7)');
+  $('time-context').textContent=airSelection.source==='maiac'?'MAIAC: วันผลิตภัณฑ์ UTC · ข้อมูลไฟ: วันไทย':'CAMS และข้อมูลไฟ: วันไทย (UTC+7)';
   $('air-source').value=airSelection.source;
   const dustLabel=D.labels[state.pollutant];
-  $('air-view').innerHTML=airSelection.source!=='maiac'?`<option value="${airSelection.source}">การประมาณค่าฝุ่น ${dustLabel} · ${M.airSourceName(airSelection.source)}</option>`:`<option value="idw">การประมาณค่าฝุ่น ${dustLabel}</option><option value="source">${dustLabel} ณ ตำแหน่งที่มีข้อมูล</option>`;
-  if(airSelection.source==='maiac')$('air-view').value=state.airView;
-  $('air-view').disabled=airSelection.source!=='maiac';
-  $('viirs-reference').hidden=airSelection.source!=='viirs';
-  const viirsTimes=airSelection.day.observation_times_utc||[];
-  $('viirs-reference').textContent=viirsTimes.length?`AOD 550 nm · ${(airSelection.day.satellites||[]).map(s=>s.replace('NOAA','NOAA-')).join(' / ')} · รอบภาพ ${viirsTimes.map(t=>timeText(t)+' น.').join(', ')} · ครอบคลุมช่องรายงาน ${fmt(airSummary.coverageFraction*100,1)}% ของพื้นที่`:'ยังไม่มี AOD ผ่าน QA ของ VIIRS NOAA ในวันที่เลือก';
+  $('air-view').innerHTML=airSelection.source==='cams'?`<option value="cams">การประมาณค่าฝุ่น ${dustLabel} · CAMS</option>`:`<option value="idw">การประมาณค่าฝุ่น ${dustLabel}</option><option value="source">${dustLabel} ณ ตำแหน่งที่มีข้อมูล</option>`;
+  if(airSelection.source!=='cams')$('air-view').value=state.airView;
+  $('air-view').disabled=airSelection.source==='cams';
   $('air-controls').hidden=state.view==='fire'||!!stationMap?.active;
   $('forecast-controls').hidden=airSelection.source!=='cams'||state.view==='fire'||!!stationMap?.active;$('cams-period').value=airSelection.period;$('forecast-label').hidden=airSelection.period!=='hourly';
   const select=$('forecast-time');select.replaceChildren();
@@ -183,15 +179,15 @@ function renderControls(){
   $('date-range').value=dates.indexOf(state.date);$('date-range-count').textContent=`${dates.length} วัน`;
   $('date-range-start').textContent=dateText(dates[0]);$('date-range-end').textContent=dateText(dates.at(-1));
   $('date-availability-status').textContent=state.view==='fire'?(fireSummary.available?`${fmt(fireSummary.observations,0)} รายการตรวจพบ${fireSummary.partial?' · ข้อมูลบางส่วน':''}`:state.fireSources.length?'ไม่มีข้อมูลไฟของวันที่เลือก':'ยังไม่ได้เลือกดาวเทียม'):
-    airSummary.available?`${M.airSourceName(airSelection.source)} · ${airSelection.period==='hourly'?'ค่าพยากรณ์รายชั่วโมง':airSummary.mode==='idw'?'IDW ทั้งพื้นที่':'มีข้อมูล '+airSummary.sourceCount+' ช่อง'}`:'ไม่มีค่าฝุ่นที่ใช้ได้ของวันที่เลือก';
+    airSummary.available?`${airSelection.source.toUpperCase()} · ${airSelection.period==='hourly'?'ค่าพยากรณ์รายชั่วโมง':airSummary.mode==='idw'?'IDW ทั้งพื้นที่':'มีข้อมูล '+airSummary.sourceCount+' ช่อง'}`:'ไม่มีค่าฝุ่นที่ใช้ได้ของวันที่เลือก';
   renderCalendar();
   document.querySelector(`input[name="pollutant"][value="${state.pollutant}"]`).checked=true;
 }
 function renderMetrics(){
   $('air-metric-title').textContent=`ค่าประมาณ ${D.labels[state.pollutant]} ${airSummary.partial?'ของช่องที่มีข้อมูล':'เฉลี่ยพื้นที่'}`;
   $('metric-pm').textContent=fmt(airSummary.mean,2);
-  $('metric-pm-note').textContent=M.airSourceName(airSelection.source)+' · '+(airSelection.period==='hourly'?(timeText(airSelection.selectedTime)+' น.'):
-    airSummary.mode==='idw'?'IDW ทั้งพื้นที่':airSummary.mode==='source'?'เฉพาะกริดที่มี AOD':airSelection.source==='viirs'?'AOD550 รายวัน · กริดรายงาน 6 กม.':'AOD เฉลี่ย 24 ชม.')+(state.pollutant!=='pm25'?' · CALLAB':'');
+  $('metric-pm-note').textContent=airSelection.source.toUpperCase()+' · '+(airSelection.period==='hourly'?(timeText(airSelection.selectedTime)+' น.'):
+    airSummary.mode==='idw'?'IDW ทั้งพื้นที่':airSummary.mode==='source'?'เฉพาะกริดที่มี AOD':'AOD เฉลี่ย 24 ชม.')+(state.pollutant!=='pm25'?' · CALLAB':'');
   $('metric-hotspots').textContent=fmt(fireSummary.observations,0);$('metric-emission').textContent=fmt(fireSummary.emissionKg,2);$('metric-grids').textContent=fmt(fireSummary.gridCount,0);
   $('metric-hotspots-note').textContent=!state.fireSources.length?'ยังไม่ได้เลือกดาวเทียม':dayJobLoading?'กำลังโหลดข้อมูลวันที่เลือก':!fireSummary.available?'ยังไม่มีข้อมูลของวันที่เลือก':(fireSummary.partial?'บางแหล่งข้อมูลยังไม่ครบ':'ข้อมูลตามดาวเทียมที่เลือก')+' · อาจซ้ำรอบผ่าน';
   $('metric-hotspots-note').classList.toggle('warning',fireSummary.partial);
@@ -202,12 +198,9 @@ function renderMetrics(){
 function renderStatus(){
   const manifest=data.manifest,air=manifest.sources.air,fire=manifest.sources.fire,selectedFire=fireDay||data.fireStatus,fireState=fireDay?.data_state||data.fireStatus.state;
   $('sync-time').textContent='รวมข้อมูลล่าสุด '+timeText(manifest.generated_at_utc)+' น.';
-  const rows=[['MAIAC / CAMS / VIIRS NOAA',air.state,air.upstream_updated_at_utc,'ข้อมูลต้นทาง'],['FIRMS / EMISSION',fire.state==='ok'?(fireState==='ok'?'ok':'partial'):fire.state,fire.upstream_updated_at_utc,'ข้อมูลต้นทาง']];
+  const rows=[['MAIAC / CAMS',air.state,air.upstream_updated_at_utc,'ข้อมูลต้นทาง'],['FIRMS / EMISSION',fire.state==='ok'?(fireState==='ok'?'ok':'partial'):fire.state,fire.upstream_updated_at_utc,'ข้อมูลต้นทาง']];
   $('source-status').innerHTML=rows.map(([name,status,time,label])=>`<div class="source-status-row"><div><b>${name}</b><span class="status-pill ${status==='ok'?'':status==='partial'?'partial':'stale'}">${status==='ok'?'รับข้อมูลแล้ว':status==='partial'?'ข้อมูลบางส่วน':'ใช้ชุดเดิม'}</span></div><small>${label} ${safe(timeText(time))} น.</small></div>`).join('')+
     Object.entries(selectedFire.source_status||selectedFire.sources||{}).map(([source,q])=>`<div class="source-status-row"><div><b>${safe(SOURCE_NAMES[source]||source)}</b><span class="status-pill ${q.state==='ok'?'':'partial'}">${q.state==='ok'?'โหลดแล้ว':q.state==='partial'?'ข้อมูลบางส่วน':q.state==='error'?'ขัดข้อง':'ยังไม่มีข้อมูล'}</span></div>${q.max_date?'<small>ผลิตภัณฑ์ล่าสุด '+safe(q.max_date)+'</small>':''}</div>`).join('');
-  if(data.air.viirs?.generated_at_utc){const v=data.air.viirs;
-    $('source-status').insertAdjacentHTML('beforeend',`<div class="source-status-row"><div><b>VIIRS NOAA · AOD550</b><span class="status-pill ${v.state==='ok'?'':'partial'}">${v.state==='ok'?'ตรวจข้อมูลแล้ว':'ข้อมูลบางส่วน'}</span></div><small>ตรวจไฟล์ล่าสุด ${safe(timeText(v.generated_at_utc))} น.${v.pending_days?' · รอเติมย้อนหลัง '+fmt(v.pending_days,0)+' วัน':''}</small></div>`);
-  }
   $('source-status-tag').textContent=manifest.state==='ok'?'SYNCED':'PARTIAL SYNC';
   $('grid-join-status').textContent=`ตรวจจับคู่ตำแหน่งกริด ${fmt(manifest.grid_validation.matching_cells,0)} / ${fmt(manifest.grid_validation.air_count,0)} ช่องแล้ว · เวลาอัปเดตแยกตามแหล่งข้อมูล`;
   const stale=manifest.state!=='ok';
@@ -220,23 +213,22 @@ function chartSource(){return state.airChartSource||airSelection.source;}
 function renderCharts(rebuild=false){
   const airSource=chartSource(),fireUnit=state.fireMetric==='hotspots'?'รายการ':'kg';
   if(rebuild){
-    const seriesData=data.air[airSource]||data.air.maiac;
-    airSeries=M.airDailySeries(data.air,gridBundle,seriesData.start_date,seriesData.end_date,state.pollutant,airSource);
+    airSeries=M.airDailySeries(data.air,gridBundle,data.air.maiac.start_date,data.air.maiac.end_date,state.pollutant,airSource);
     const last=[state.date,D.thaiDay(),data.fireIndex.dates.at(-1)].sort()[0],first=[shift(last,-Number($('chart-days').value)+1),data.fireIndex.dates[0]].sort().at(-1);
     fireSeries=first<=last?M.fireTimeSeries(data.fireIndex,first,last,state.fireSources,state.peat,state.fireMetric):[];
     DropLineChart.render($('air-chart'),airSeries,{unit:'µg/m³',selectedDate:state.date,color:'#5e9360',onSelect:chooseDate,onInspect:text=>{$('air-chart-readout').textContent=text;},dateText,format:value=>fmt(value,2)});
     DropLineChart.render($('fire-chart'),fireSeries,{unit:fireUnit,selectedDate:state.date,color:'#c48a4d',onSelect:chooseDate,onInspect:text=>{$('fire-chart-readout').textContent=text;},dateText,format:value=>fmt(value,state.fireMetric==='hotspots'?0:2)});
-    $('air-chart-start').textContent=airSeries.length?dateText(airSeries[0].date):'—';$('air-chart-end').textContent=airSeries.length?dateText(airSeries.at(-1).date):'—';
+    $('air-chart-start').textContent=dateText(data.air.maiac.start_date);$('air-chart-end').textContent=dateText(data.air.maiac.end_date);
     $('fire-chart-start').textContent=fireSeries.length?dateText(fireSeries[0].date):'—';$('fire-chart-end').textContent=fireSeries.length?dateText(fireSeries.at(-1).date):'—';
   }
   DropLineChart.select($('air-chart'),state.date);DropLineChart.select($('fire-chart'),state.date);
   const a=airSeries.find(row=>row.date===state.date),f=fireSeries.find(row=>row.date===state.date);
   $('air-chart-source').value=airSource;$('fire-chart-metric').value=state.fireMetric;
-  $('air-chart-title').textContent=`${D.labels[state.pollutant]} ${airSource==='viirs'?'เฉลี่ยช่องที่มีข้อมูล':'เฉลี่ยทั้งพื้นที่'}ย้อนหลัง`;
-  $('air-chart-note').textContent=(airSource==='maiac'?'MAIAC ที่มีจุดเพียงพอสำหรับ IDW ทั้งพื้นที่':airSource==='viirs'?'VIIRS NOAA จาก AOD550 ผ่าน QA · เฉลี่ยเฉพาะพื้นที่กริดที่มีข้อมูล ไม่ใช่ค่าเฉลี่ยครบ 24 ชั่วโมง':'CAMS จาก AOD เฉลี่ยครบ 24 ชั่วโมงตามเวลาไทย')+' · µg/m³';
+  $('air-chart-title').textContent=`${D.labels[state.pollutant]} เฉลี่ยทั้งพื้นที่ย้อนหลัง`;
+  $('air-chart-note').textContent=(airSource==='maiac'?'MAIAC ที่มีจุดเพียงพอสำหรับ IDW ทั้งพื้นที่':'CAMS จาก AOD เฉลี่ยครบ 24 ชั่วโมงตามเวลาไทย')+' · µg/m³';
   $('fire-chart-title').textContent=state.fireMetric==='hotspots'?'จำนวนจุดความร้อนรายวัน':'การปล่อย PM₂.₅ รายวัน';
   $('fire-chart-note').textContent=state.fireMetric==='hotspots'?'หน่วยรายการตรวจพบ · ตามดาวเทียมที่เลือก อาจมีหลายรอบผ่าน':`หน่วย kg · สถานการณ์รายวัน ${state.peat?'รวม':'ไม่รวม'}ดินพรุ · กริดซ้ำรวมครั้งเดียว`;
-  $('air-chart-readout').textContent=a?`${dateText(a.date)} · ${fmt(a.value,2)} µg/m³ · ${M.airSourceName(a.source)}${a.mode==='idw'?' / IDW':''}${a.source==='viirs'?' · ครอบคลุม '+fmt(a.coverageFraction*100,1)+'% ของพื้นที่':''}`:`ย้อนหลังถึง ${dateText(data.air.maiac.end_date)} · เลือกจุดเพื่อดูค่าเฉลี่ยรายวัน`;
+  $('air-chart-readout').textContent=a?`${dateText(a.date)} · ${fmt(a.value,2)} µg/m³ · ${a.source.toUpperCase()}${a.mode==='idw'?' / IDW':''}`:`ย้อนหลังถึง ${dateText(data.air.maiac.end_date)} · เลือกจุดเพื่อดูค่าเฉลี่ยรายวัน`;
   $('fire-chart-readout').textContent=f?`${dateText(f.date)} · ${fmt(f.value,state.fireMetric==='hotspots'?0:2)} ${fireUnit}${f.state==='partial'?' · ข้อมูลบางส่วน':f.state==='missing'?' · ไม่มีข้อมูล':''}`:'เลือกจุดเพื่อดูค่ารายวัน';
 }
 function calendarInfo(date){return M.calendarAvailability({date,view:state.view,airSource:airSelection.source,airPeriod:state.period,air:data.air,fireIndex:data.fireIndex,fireSources:state.fireSources});}
@@ -248,14 +240,14 @@ function renderCalendar(){
   for(let i=0;i<42;i++){
     const date=shift(start,i),info=calendarInfo(date),button=document.createElement('button');button.type='button';button.className='calendar-day'+(date===state.date?' selected':'')+(date===D.thaiDay()?' today':'');button.dataset.date=date;
     button.disabled=!dates.includes(date);button.setAttribute('aria-pressed',String(date===state.date));
-    const statuses=[];if(state.view!=='fire'&&info.air)statuses.push('มีค่า '+M.airSourceName(airSelection.source)+(info.forecast?' พยากรณ์':''));if(state.view!=='air'&&info.fire)statuses.push('พบจุดความร้อน');if(state.view!=='air'&&info.fireZero)statuses.push('มีข้อมูลไฟแต่ไม่พบจุด');if(info.partial)statuses.push('ข้อมูลบางส่วน');
+    const statuses=[];if(state.view!=='fire'&&info.air)statuses.push('มีค่า '+airSelection.source.toUpperCase()+(info.forecast?' พยากรณ์':''));if(state.view!=='air'&&info.fire)statuses.push('พบจุดความร้อน');if(state.view!=='air'&&info.fireZero)statuses.push('มีข้อมูลไฟแต่ไม่พบจุด');if(info.partial)statuses.push('ข้อมูลบางส่วน');
     button.setAttribute('aria-label',dateText(date)+' · '+(statuses.join(' · ')||'ไม่มีข้อมูลในโหมดนี้'));button.title=button.getAttribute('aria-label');
     const number=document.createElement('span');number.textContent=String(Number(date.slice(-2)));if(date.slice(0,7)!==calendarMonth)number.style.opacity='.45';button.append(number);
     const dots=document.createElement('span');dots.className='calendar-dots';
     for(const [show,kind]of [[state.view!=='fire'&&info.air,'air-dot'],[state.view!=='air'&&info.fire,'fire-dot'],[state.view!=='air'&&info.fireZero,'zero-dot']])if(show){const dot=document.createElement('i');dot.className='day-dot '+kind;dot.setAttribute('aria-hidden','true');dots.append(dot);}
     button.append(dots);button.addEventListener('click',()=>{chooseDate(date);$('availability-calendar').hidden=true;$('calendar-toggle').setAttribute('aria-expanded','false');});holder.append(button);
   }
-  $('calendar-context').textContent=state.view==='fire'?'อิงดาวเทียมที่เลือก · วันตรวจแล้วไม่พบจะแสดงวงกลมโปร่ง':state.view==='air'?`อิงแหล่งข้อมูล ${M.airSourceName(airSelection.source)} และช่วงเวลาที่เลือก`:`ค่าฝุ่น ${M.airSourceName(airSelection.source)} และข้อมูลไฟตามดาวเทียมที่เลือก`;
+  $('calendar-context').textContent=state.view==='fire'?'อิงดาวเทียมที่เลือก · วันตรวจแล้วไม่พบจะแสดงวงกลมโปร่ง':state.view==='air'?`อิงแหล่งข้อมูล ${airSelection.source.toUpperCase()} และช่วงเวลาที่เลือก`:`ค่าฝุ่น ${airSelection.source.toUpperCase()} และข้อมูลไฟตามดาวเทียมที่เลือก`;
   const latest=dates.findLast(date=>date<=D.thaiDay()&&calendarInfo(date).available);$('latest-data').disabled=!latest;
 }
 function moveMonth(offset){const [year,month]=calendarMonth.split('-').map(Number);calendarMonth=new Date(Date.UTC(year,month-1+offset,1)).toISOString().slice(0,7);renderCalendar();}
@@ -285,7 +277,7 @@ async function loadDay(){
   catch(error){if(job!==dayJob)return;toast('โหลดข้อมูลไฟวันที่เลือกไม่สำเร็จ กรุณาลองใหม่');}
   await stationLoad;if(job===dayJob){dayJobLoading=false;refresh();}
 }
-async function chooseDate(date){if(!dates.includes(date))return;state.date=date;calendarMonth=date.slice(0,7);state.airChoice=state.airChoice==='viirs'?'viirs':'auto';state.period='auto';state.validTime=null;state.followNow=date===D.thaiDay();await loadDay();}
+async function chooseDate(date){if(!dates.includes(date))return;state.date=date;calendarMonth=date.slice(0,7);state.airChoice='auto';state.period='auto';state.validTime=null;state.followNow=date===D.thaiDay();await loadDay();}
 function setView(view,initial=false){
   if(!VIEWS[view])view='overview';state.view=view;
   const [eyebrow,title,description]=VIEWS[view];$('view-eyebrow').textContent=eyebrow;$('page-title').textContent=title;$('page-description').textContent=description;
@@ -329,9 +321,9 @@ function changeSatellites(){state.fireSources=[...document.querySelectorAll('[da
 function changeFuels(){state.fuelTypes=[...document.querySelectorAll('[data-fuel]:checked')].map(input=>input.dataset.fuel);$('show-fuels').checked=state.fuelTypes.length>0;$('fuel-legend').hidden=!$('show-fuels').checked;refresh();loadFuel();}
 function exportCsv(){
   const fromStation=!!stationMap?.active,station=stationMap?.summary;
-  const rows=[['selected_date','air_grid_id','fire_grid_id','air_source','air_period','air_valid_time_utc','maiac_product_day_utc','fire_day_thailand','pollutant','air_concentration_ug_m3','air_spatial_support','air_resolution_degrees','emission_pm25_kg','observations','fire_coverage_state','selected_satellites','include_peat_0_10cm','station_hour_start_utc','station_hour_end_utc','station_input_ids','air_aod_wavelength_nm','air_reporting_grid_m','viirs_observation_times_utc']];
+  const rows=[['selected_date','air_grid_id','fire_grid_id','air_source','air_period','air_valid_time_utc','maiac_product_day_utc','fire_day_thailand','pollutant','air_concentration_ug_m3','air_spatial_support','air_resolution_degrees','emission_pm25_kg','observations','fire_coverage_state','selected_satellites','include_peat_0_10cm','station_hour_start_utc','station_hour_end_utc','station_input_ids']];
   for(const cross of data.crosswalk.cells){const raw=fromStation?stationMap.sample(cross.air_id):rawValueAt(cross.air_id),value=fromStation?raw:D.concentration(raw,state.pollutant),fire=fireCells.get(cross.fire_id),emission=fire?(state.peat?fire.emission_kg:fire.emission_without_peat_kg):fireSummary.available?0:null;
-    rows.push([state.date,cross.air_id,cross.fire_id,fromStation?'airthai_stations':airSelection.source,fromStation?'hourly':airSelection.period,fromStation?station?.hour?.end_utc||'':airSelection.selectedTime||'',!fromStation&&airSelection.source==='maiac'?state.date:'',state.date,fromStation?'pm25':state.pollutant,value===null?'':value,fromStation?'station_idw_at_grid_sample':airSelection.source==='cams'?'native_cams_at_grid_sample':airSelection.source==='viirs'?'viirs_6km_reporting_grid_at_sample':airSummary.mode==='idw'?'idw_at_grid_sample':'maiac_source_grid',!fromStation&&airSelection.source==='cams'?0.4:'',emission===null?'':emission,fire?.observation_count??(fireSummary.available?0:''),fireSummary.state,state.fireSources.join('|'),state.peat?1:0,fromStation?station?.hour?.start_utc||'':'',fromStation?station?.hour?.end_utc||'':'',fromStation?station?.ids?.join('|')||'':'',fromStation?'':airSelection.source==='maiac'?470:550,!fromStation&&airSelection.source==='viirs'?6000:'',!fromStation&&airSelection.source==='viirs'?(airSelection.day.observation_times_utc||[]).join('|'):'']);}
+    rows.push([state.date,cross.air_id,cross.fire_id,fromStation?'airthai_stations':airSelection.source,fromStation?'hourly':airSelection.period,fromStation?station?.hour?.end_utc||'':airSelection.selectedTime||'',!fromStation&&airSelection.source==='maiac'?state.date:'',state.date,fromStation?'pm25':state.pollutant,value===null?'':value,fromStation?'station_idw_at_grid_sample':airSelection.source==='cams'?'native_cams_at_grid_sample':airSummary.mode==='idw'?'idw_at_grid_sample':'maiac_source_grid',!fromStation&&airSelection.source==='cams'?0.4:'',emission===null?'':emission,fire?.observation_count??(fireSummary.available?0:''),fireSummary.state,state.fireSources.join('|'),state.peat?1:0,fromStation?station?.hour?.start_utc||'':'',fromStation?station?.hour?.end_utc||'':'',fromStation?station?.ids?.join('|')||'':'']);}
   const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download=`kuan-kreng-${state.date}-${fromStation?'pm25-stations':state.pollutant}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);toast('ดาวน์โหลดข้อมูล 1,052 กริด พร้อมหน่วยและช่วงเวลาแล้ว');
 }
@@ -341,9 +333,7 @@ async function init(){
     const r=await Promise.all(paths.map(p=>readJson(p)));
     data={manifest:r[0],air:{maiac:r[1],cams:r[2],forecast:r[3]},airGrid:r[4],camsGrid:r[5],boundary:r[6],fireIndex:r[7],fireStatus:r[8],project:r[9],parameters:r[10],crosswalk:r[11]};
     const derivedIndex=new Map(r[12].daily.map(row=>[row.date,row]));data.fireIndex.daily=data.fireIndex.daily.map(row=>({...row,selections:derivedIndex.get(row.date)?.selections}));
-    const optional=await Promise.all(['air/viirs_history.json','air/viirs_grid.geojson'].map(p=>readJson(p,true)));
-    data.air.viirs=optional[0]||{days:[],start_date:data.air.maiac.start_date,end_date:D.thaiDay(),grid_count:0};data.viirsGrid=optional[1]||{type:'FeatureCollection',features:[]};
-    gridBundle={maiac:data.airGrid,cams:data.camsGrid,viirs:data.viirsGrid};gridById=new Map(data.airGrid.features.map(f=>[f.properties.grid_id,f]));crossByAir=new Map(data.crosswalk.cells.map(c=>[c.air_id,c]));crossByFire=new Map(data.crosswalk.cells.map(c=>[c.fire_id,c]));
+    gridBundle={maiac:data.airGrid,cams:data.camsGrid};gridById=new Map(data.airGrid.features.map(f=>[f.properties.grid_id,f]));crossByAir=new Map(data.crosswalk.cells.map(c=>[c.air_id,c]));crossByFire=new Map(data.crosswalk.cells.map(c=>[c.fire_id,c]));
     if(data.manifest.grid_validation.state!=='matched'||crossByAir.size!==data.airGrid.features.length)throw Error('กริดสองแหล่งไม่ตรงกัน กรุณาตรวจชุดข้อมูลก่อนแสดงร่วมกัน');
     const first=[data.air.maiac.start_date,data.fireIndex.dates[0]].sort()[0],last=[D.thaiDay(),data.fireIndex.dates.at(-1),...data.air.forecast.hours.map(h=>D.thaiDay(h.valid_time))].sort().at(-1);
     dates=M.dates(first,last);if(!dates.includes(state.date))state.date=D.thaiDay();$('date-input').min=dates[0];$('date-input').max=dates.at(-1);$('date-range').max=dates.length-1;calendarMonth=state.date.slice(0,7);
